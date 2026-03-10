@@ -102,7 +102,7 @@ router.post("/", authMiddleware, async (req, res) => {
     const results = await Chunk.aggregate([
       {
         $vectorSearch: {
-          index: "vector_index",
+          index: "vector_index_1",
           path: "embedding",
           queryVector: questionEmbedding,
           numCandidates: 100,
@@ -119,13 +119,26 @@ router.post("/", authMiddleware, async (req, res) => {
       },
     ]);
     console.timeEnd("VectorSearch");
+    console.log(`VectorSearch returned ${results.length} results. Top score: ${results[0]?.score ?? 'N/A'}`);
 
-    if (!results.length || results[0].score < 0.7) {
-      return res.json({
-        answer:
-          "I don't know. This is not covered in the SOP documents.",
-        sources: [],
-      });
+    if (!results.length || results[0].score < 0.3) {
+      // Must respond with SSE since the frontend reads this as an event stream
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+
+      const noAnswerMsg = results.length === 0
+        ? "I don't know. No SOP documents have been uploaded to the knowledge base yet. Please ask an admin to upload relevant documents."
+        : "I don't know. This question is not covered in the available SOP documents.";
+
+      // Save the "I don't know" to conversation history
+      await Message.create({ sessionId, role: "assistant", content: noAnswerMsg });
+
+      res.write(`data: ${JSON.stringify({ type: 'sources', sources: [] })}\n\n`);
+      res.write(`data: ${JSON.stringify({ type: 'content', content: noAnswerMsg })}\n\n`);
+      res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
+      return res.end();
     }
 
     const context = results
@@ -139,49 +152,80 @@ router.post("/", authMiddleware, async (req, res) => {
 
     const orderedHistory = history.reverse();
 
-    console.time("LLM");
-    const completion = await client.chat.completions.create({
-      model: "llama-3.1-8b-instant",
-      temperature: 0.2,
-      max_tokens: 500,
-      messages: [
-        {
-          role: "system",
-          content:
-            "Answer strictly from the provided context. If not found, say 'I don't know.'",
-        },
+    console.time("Groq_LLM");
 
-        ...orderedHistory.map((m) => ({
-          role: m.role,
-          content: m.content,
-        })),
+    // Set up SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('Access-Control-Allow-Origin', '*');
 
-        {
-          role: "user",
-          content: `Context:\n${context}\n\nQuestion:\n${question}`,
-        },
-      ],
-    });
-    console.timeEnd("LLM");
-
-    const answer = completion.choices[0].message.content;
-
-    await Message.create({
-      sessionId,
-      role: "assistant",
-      content: answer,
-    });
-
+    // First send the sources to the client
     const sources = results.map((r) => ({
       document: r.documentName || "Unknown Document",
       page: r.pageNumber || "N/A",
       score: r.score.toFixed(3),
     }));
 
-    res.json({
-      answer,
-      sources,
+    res.write(`data: ${JSON.stringify({ type: 'sources', sources })}\n\n`);
+
+    const OpenAI = require("openai");
+    const groq = new OpenAI({
+      apiKey: process.env.GROQ_API_KEY,
+      baseURL: "https://api.groq.com/openai/v1",
     });
+
+    const messages = [
+      {
+        role: "system",
+        content: "You are a corporate knowledge assistant. Answer ONLY from the provided SOP context. Cite your source for every claim. If the answer is not in the context, say 'I don't know.' Do NOT use outside knowledge.",
+      },
+      ...orderedHistory.map((m) => ({ role: m.role, content: m.content })),
+      {
+        role: "user",
+        content: `Context:\n${context}\n\nQuestion: ${question}`,
+      },
+    ];
+
+    let fullAnswer = "";
+
+    try {
+      const stream = await groq.chat.completions.create({
+        model: "llama-3.1-8b-instant",
+        messages,
+        temperature: 0.2,
+        max_tokens: 800,
+        stream: true,
+      });
+
+      for await (const chunk of stream) {
+        const token = chunk.choices[0]?.delta?.content || "";
+        if (token) {
+          fullAnswer += token;
+          res.write(`data: ${JSON.stringify({ type: 'content', content: token })}\n\n`);
+        }
+      }
+
+      res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
+      res.end();
+      console.log("Groq_LLM done");
+    } catch (llmError) {
+      console.error("LLM Error:", llmError.message);
+      res.write(`data: ${JSON.stringify({ type: 'content', content: "Error: " + llmError.message })}\n\n`);
+      res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
+      res.end();
+      return;
+    }
+
+    // Save assistant message to DB after stream closes
+    await Message.create({
+      sessionId,
+      role: "assistant",
+      content: fullAnswer,
+    });
+
+
+
 
   } catch (error) {
     console.error(error);

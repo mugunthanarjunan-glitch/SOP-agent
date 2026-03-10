@@ -6,6 +6,8 @@ const chunkSchema= new mongoose.Schema({
         type:[Number],
         require:true
     },
+    documentName: String,
+    pageNumber: Number,
     uploadedBy:{type:mongoose.Schema.Types.ObjectId,ref:"User"}
 })
 
