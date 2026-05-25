@@ -22,7 +22,7 @@ const Register = () => {
 
         try {
             // Assuming backend runs on 5000
-            const res = await axios.post('https://sop-agent-jvhb.onrender.com/auth/register', { name, email, password, role });
+            const res = await axios.post('https://sop-agent-1.onrender.com/auth/register', { name, email, password, role });
 
             // Optionally login immediately after registering
             login(res.data.user, res.data.token);
