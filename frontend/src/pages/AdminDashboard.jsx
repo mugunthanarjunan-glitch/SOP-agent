@@ -14,7 +14,7 @@ const AdminDashboard = () => {
 
     const fetchDocuments = async () => {
         try {
-            const res = await axios.get('http://localhost:5000/api/documents', {
+            const res = await axios.get('https://sop-agent-1.onrender.com/api/documents', {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setDocuments(res.data);
@@ -42,7 +42,7 @@ const AdminDashboard = () => {
         formData.append('pdf', file);
 
         try {
-            await axios.post('http://localhost:5000/api/upload', formData, {
+            await axios.post('https://sop-agent-1.onrender.com/api/upload', formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                     Authorization: `Bearer ${token}`
@@ -63,7 +63,7 @@ const AdminDashboard = () => {
     const handleDelete = async (documentName) => {
         if (!window.confirm(`Are you sure you want to delete ${documentName}?`)) return;
         try {
-            await axios.delete(`http://localhost:5000/api/documents/${documentName}`, {
+            await axios.delete(`https://sop-agent-1.onrender.com/api/documents/${documentName}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             fetchDocuments();
