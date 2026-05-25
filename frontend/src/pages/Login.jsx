@@ -19,7 +19,7 @@ const Login = () => {
 
         try {
             // Assuming backend runs on 5000
-            const res = await axios.post('http://localhost:5000/auth/login', { email, password });
+            const res = await axios.post('https://sop-agent-jvhb.onrender.com/auth/login', { email, password });
 
             // Assume backend returns { token, user: { id, role, ... } }
             login(res.data.user, res.data.token);
