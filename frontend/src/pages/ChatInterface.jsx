@@ -24,7 +24,7 @@ const ChatInterface = () => {
 
     const loadSessions = async () => {
         try {
-            const res = await axios.get('http://localhost:5000/api/chat/sessions', {
+            const res = await axios.get('https://sop-agent-1.onrender.com/api/chat/sessions', {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setSessions(res.data);
@@ -43,7 +43,7 @@ const ChatInterface = () => {
     const loadSessionMessages = async (sessionId) => {
         setCurrentSessionId(sessionId);
         try {
-            const res = await axios.get(`http://localhost:5000/api/chat/${sessionId}`, {
+            const res = await axios.get(`https://sop-agent-1.onrender.com/api/chat/${sessionId}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setMessages(res.data);
@@ -54,7 +54,7 @@ const ChatInterface = () => {
 
     const handleNewSession = async () => {
         try {
-            const res = await axios.post('http://localhost:5000/api/chat/session', {}, {
+            const res = await axios.post('https://sop-agent-1.onrender.com/api/chat/session', {}, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setSessions([res.data, ...sessions]);
@@ -83,7 +83,7 @@ const ChatInterface = () => {
             setMessages(prev => [...prev, { role: 'assistant', content: '', sources: [], _id: tempId, isStreaming: true }]);
 
             const reqBody = { question, sessionId: currentSessionId };
-            const response = await fetch('http://localhost:5000/api/chat', {
+            const response = await fetch('https://sop-agent-1.onrender.com/api/chat', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
